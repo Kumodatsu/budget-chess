@@ -1,6 +1,8 @@
-[gd_scene load_steps=4 format=2]
+[gd_scene load_steps=6 format=2]
 
 [ext_resource path="res://assets/fonts/tuffy-bold/Tuffy_Bold.ttf" type="DynamicFontData" id=1]
+[ext_resource path="res://scenes/GameCreation.tscn" type="PackedScene" id=2]
+[ext_resource path="res://scripts/ui/ButtonChangeScene.gd" type="Script" id=3]
 
 [sub_resource type="DynamicFont" id=1]
 size = 64
@@ -38,9 +40,11 @@ margin_right = 768.0
 margin_bottom = 432.0
 custom_fonts/font = SubResource( 2 )
 text = "Create Game"
+script = ExtResource( 3 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
+target_scene = ExtResource( 2 )
 
 [node name="ButtonJoinGame" type="Button" parent="."]
 margin_left = 512.0

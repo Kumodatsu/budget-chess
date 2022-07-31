@@ -7,8 +7,10 @@ export var square_size:  float  setget set_square_size
 export var file: int = 0 setget set_file
 export var rank: int = 0 setget set_rank
 
+signal on_square_selected(square)
+
 func _ready():
-  pass
+  var _r = $Button.connect("pressed", self, "on_selected")
 
 func set_square_color(value: Color):
   color = value
@@ -32,3 +34,6 @@ func set_text(value: String):
 
 func get_square_name() -> String:
   return "abcdefghijklmnopqrstuvwxyz".substr(file, 1) + str(rank + 1)
+
+func on_selected():
+  emit_signal("on_square_selected", self)

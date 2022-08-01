@@ -68,15 +68,22 @@ func get_square_color(file: int, rank: int) -> Color:
     return LIGHT_SQUARE_COLOR
 
 func on_square_selected(square: Node):
+  var turn: int = board_state.get_turn()
   var file: int = square.file
   var rank: int = square.rank
+  var pos = BoardState.SquarePos.new(file, rank)
   if selection:
-    var _success = board_state.make_move(BoardState.Ply.new(
-      BoardState.SquarePos.new(selection.file, selection.rank),
-      BoardState.SquarePos.new(file, rank)
-    ))
+    if board_state.get_square(pos) & turn == 0:
+      var _success = board_state.make_move(BoardState.Ply.new(
+        BoardState.SquarePos.new(selection.file, selection.rank),
+        pos
+      ))
+      reset_selection()
+      return
     reset_selection()
+  elif board_state.get_square(pos) & board_state.other_player(turn) != 0:
     return
+
   var legal_moves: Array = board_state.get_legal_moves()
   for move in legal_moves:
     if move.source.file == file and move.source.rank == rank:

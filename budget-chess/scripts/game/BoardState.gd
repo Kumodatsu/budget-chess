@@ -41,6 +41,8 @@ enum CastleType {
   Long  = 2
 }
 
+signal on_move_made(ply, next_player, capture_square)
+
 const N_RANKS: int = 8
 const N_FILES: int = 8
 
@@ -168,10 +170,10 @@ func get_legal_moves() -> Array:
         for dir in orthodiagonals:
           var target_square: SquarePos = square.move(dir[0], dir[1])
           if not is_valid_square(target_square):
-            break
+            continue
           var target_piece: int = get_square(target_square)
           if target_piece & turn == 0:
-            moves.append(Ply.new(square, square.move(dir[0], dir[1])))
+            moves.append(Ply.new(square, target_square))
       PieceType.Queen:
         for dir in orthodiagonals:
           for i in range(1, N_FILES):
@@ -253,6 +255,55 @@ func get_legal_moves() -> Array:
       _:
         pass
   return moves
+
+func make_move(ply: Ply) -> bool:
+  var legal_moves = get_legal_moves()
+  var legal       = false
+  for move in legal_moves:
+    if ply.source.is_same(move.source) \
+        and ply.destination.is_same(move.destination):
+      legal = true
+      break
+  if not legal:
+    return false
+  
+  var piece          = get_square(ply.source)
+  var captured       = get_square(ply.destination)
+  var capture_square = null
+  if captured != NO_PIECE:
+    capture_square = ply.destination
+  set_square(ply.source,      NO_PIECE)
+  set_square(ply.destination, piece)
+
+  turn = other_player(turn)
+
+  # En Passant
+  if en_passant_square and piece & PieceType.Pawn \
+      and en_passant_square.is_same(ply.destination):
+    capture_square = SquarePos.new(en_passant_square.file, 0)
+    if en_passant_square.rank == 2:
+      capture_square.rank = 3
+    else:
+      capture_square.rank = 4
+    set_square(capture_square, NO_PIECE)
+
+  en_passant_square = null
+  if piece & PieceType.Pawn:
+    var en_passant_rank: int
+    var capture_rank:    int
+    match piece & PIECE_PLAYER_MASK:
+      Player.White:
+        en_passant_rank = 3
+        capture_rank    = 2
+      Player.Black:
+        en_passant_rank = 4
+        capture_rank    = 5
+    if ply.destination.rank == en_passant_rank:
+      en_passant_square = SquarePos.new(ply.destination.file, capture_rank)
+
+  emit_signal("on_move_made", ply, turn, capture_square)
+
+  return true
 
 func print_board():
   for rank in N_RANKS:

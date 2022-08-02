@@ -41,7 +41,18 @@ enum CastleType {
   Long  = 2
 }
 
-signal on_move_made(ply, next_player, capture_square)
+enum MoveResult {
+  Invalid,
+  Move,
+  Check,
+  Checkmate,
+  Stalemate,
+  InsufficientMaterial,
+  ThreefoldRepetition,
+  FiftyReversibleMoves
+}
+
+signal on_move_made(ply, next_player, capture_square, move_result)
 
 const N_RANKS: int = 8
 const N_FILES: int = 8
@@ -287,20 +298,16 @@ func get_legal_moves() -> Array:
       moves.remove(i)
   return moves
 
-func is_prevented_by_check(ply: Ply) -> bool:
-  var c = self.clone()
-  if ply:
-    c.force_move(ply)
-  var player      = c.other_player(c.turn)
-  var king_square = c.get_squares_with_piece(PieceType.King, player)[0]
+func is_check(player: int) -> bool:
+  var king_square = get_squares_with_piece(PieceType.King, player)[0]
   for dir in ORTHOGONALS:
     for i in range(1, N_FILES):
       var square: SquarePos = king_square.move(i * dir[0], i * dir[1])
-      if not c.is_valid_square(square):
+      if not is_valid_square(square):
         break
-      var piece: int = c.get_square(square)
+      var piece: int = get_square(square)
       if piece != NO_PIECE:
-        if piece & c.other_player(player) != 0 \
+        if piece & other_player(player) != 0 \
             and (piece & (PieceType.Rook | PieceType.Queen) != 0 \
             or (i == 1 and piece & PieceType.King != 0)):
           return true
@@ -308,38 +315,43 @@ func is_prevented_by_check(ply: Ply) -> bool:
   for dir in DIAGONALS:
     for i in range(1, N_FILES):
       var square: SquarePos = king_square.move(i * dir[0], i * dir[1])
-      if not c.is_valid_square(square):
+      if not is_valid_square(square):
         break
-      var piece: int = c.get_square(square)
+      var piece: int = get_square(square)
       if piece != NO_PIECE:
-        if piece & c.other_player(player) != 0 \
+        if piece & other_player(player) != 0 \
             and (piece & (PieceType.Bishop | PieceType.Queen) != 0 \
             or (i == 1 and piece & PieceType.King != 0)):
           return true
         break
   for dir in HOPS:
     var square: SquarePos = king_square.move(dir[0], dir[1])
-    if not c.is_valid_square(square):
+    if not is_valid_square(square):
       continue
-    var piece: int = c.get_square(square)
+    var piece: int = get_square(square)
     if piece != NO_PIECE:
-      if piece & c.other_player(player) != 0 \
+      if piece & other_player(player) != 0 \
           and piece & PieceType.Knight != 0:
         return true
 
-  var attacker = c.other_player(player)
+  var attacker = other_player(player)
   var pawn_dir = 1 if attacker == Player.White else -1
 
   for i in [-1, 1]:
     var square: SquarePos = king_square.move(i, -pawn_dir)
-    if not c.is_valid_square(square):
+    if not is_valid_square(square):
       continue
-    var piece: int = c.get_square(square)
+    var piece: int = get_square(square)
     if piece != NO_PIECE and piece & attacker != 0 \
         and piece & PieceType.Pawn != 0:
       return true
 
   return false
+
+func is_prevented_by_check(ply: Ply) -> bool:
+  var c = self.clone()
+  c.force_move(ply)
+  return c.is_check(c.get_turn())
 
 func force_move(ply: Ply) -> SquarePos:
   var piece          = get_square(ply.source)
@@ -378,7 +390,7 @@ func force_move(ply: Ply) -> SquarePos:
 
   return capture_square
 
-func make_move(ply: Ply) -> bool:
+func make_move(ply: Ply) -> int:
   var legal_moves = get_legal_moves()
   var legal       = false
   for move in legal_moves:
@@ -387,13 +399,24 @@ func make_move(ply: Ply) -> bool:
       legal = true
       break
   if not legal:
-    return false
+    return MoveResult.Invalid
   
   var capture_square = force_move(ply)
 
-  emit_signal("on_move_made", ply, turn, capture_square)
+  var move_result:  int  = MoveResult.Move
+  var is_check:     bool = is_check(turn)
+  var has_no_moves: bool = len(get_legal_moves()) == 0
+  if is_check:
+    if has_no_moves:
+      move_result = MoveResult.Checkmate
+    else:
+      move_result = MoveResult.Check
+  elif has_no_moves:
+    move_result = MoveResult.Stalemate
 
-  return true
+  emit_signal("on_move_made", ply, turn, capture_square, move_result)
+
+  return move_result
 
 func print_board():
   for rank in N_RANKS:

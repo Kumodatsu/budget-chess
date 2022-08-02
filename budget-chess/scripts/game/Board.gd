@@ -74,10 +74,21 @@ func on_square_selected(square: Node):
   var pos = BoardState.SquarePos.new(file, rank)
   if selection:
     if board_state.get_square(pos) & turn == 0:
-      var _success = board_state.make_move(BoardState.Ply.new(
+      var move_result = board_state.make_move(BoardState.Ply.new(
         BoardState.SquarePos.new(selection.file, selection.rank),
         pos
       ))
+      match move_result:
+        BoardState.MoveResult.Check:
+          print("CHECK")
+        BoardState.MoveResult.Checkmate:
+          var winner_str = "WHITE" \
+            if board_state.get_turn() == BoardState.Player.White else "BLACK"
+          print(winner_str + " WINS: CHECKMATE")
+        BoardState.MoveResult.Stalemate:
+          print("DRAW: STALEMATE")
+        _:
+          print(move_result)
       reset_selection()
       return
     reset_selection()
@@ -93,7 +104,8 @@ func on_square_selected(square: Node):
 func on_move_made(
     ply:            BoardState.Ply, 
     _next_player:   int,
-    capture_square: BoardState.SquarePos):
+    capture_square: BoardState.SquarePos,
+    _move_result:   int):
   if capture_square:
     ui_pieces[capture_square.rank][capture_square.file].queue_free()
   var piece = ui_pieces[ply.source.rank][ply.source.file]

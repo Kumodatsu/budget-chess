@@ -8,16 +8,6 @@
 
 config_version=4
 
-_global_script_classes=[ {
-"base": "Reference",
-"class": "BoardState",
-"language": "GDScript",
-"path": "res://scripts/game/BoardState.gd"
-} ]
-_global_script_class_icons={
-"BoardState": ""
-}
-
 [application]
 
 config/name="budget-chess"

@@ -50,6 +50,39 @@ const NO_PIECE:          int = 0
 const PIECE_TYPE_MASK:   int = 2 * PieceType.Pawn - 1
 const PIECE_PLAYER_MASK: int = 2 * Player.Black   - 1 - PIECE_TYPE_MASK
 
+const ORTHOGONALS: Array = [
+  [ 0,  1],
+  [ 1,  0],
+  [ 0, -1],
+  [-1,  0]
+]
+const DIAGONALS: Array = [
+  [ 1,  1],
+  [ 1, -1],
+  [-1, -1],
+  [-1,  1]
+]
+const ORTHODIAGONALS: Array = [
+  [ 0,  1],
+  [ 1,  0],
+  [ 0, -1],
+  [-1,  0],
+  [ 1,  1],
+  [ 1, -1],
+  [-1, -1],
+  [-1,  1]
+]
+const HOPS: Array = [
+  [ 1,  2],
+  [ 2,  1],
+  [ 2, -1],
+  [ 1, -2],
+  [-1,  2],
+  [-2,  1],
+  [-2, -1],
+  [-1, -2]
+]
+
 var board:             Array      = []
 var turn:              int        = Player.White
 var en_passant_square: SquarePos  = null
@@ -61,6 +94,17 @@ var castle_rights:     Dictionary = {
 func _init():
   initialize_board()
   initialize_default_starting_position()
+
+func clone():
+  var c = get_script().new()
+  c.board             = self.board.duplicate(true)
+  c.turn              = self.turn
+  c.en_passant_square = SquarePos.new(
+    self.en_passant_square.file,
+    self.en_passant_square.rank
+  ) if self.en_passant_square else null
+  c.castle_rights     = self.castle_rights.duplicate(true)
+  return c
 
 func initialize_board():
   for rank in N_RANKS:
@@ -103,6 +147,16 @@ func set_square(pos: SquarePos, piece: int):
 func get_square(pos: SquarePos) -> int:
   return board[pos.rank][pos.file]
 
+func get_squares_with_piece(piece_type: int, player: int) -> Array:
+  var squares = []
+  for rank in N_RANKS:
+    for file in N_FILES:
+      var pos   = SquarePos.new(file, rank)
+      var piece = get_square(pos)
+      if piece & piece_type != 0 and piece & player != 0:
+        squares.append(pos)
+  return squares
+
 func is_valid_square(pos: SquarePos) -> bool:
   return pos.file >= 0 and pos.file < N_FILES \
      and pos.rank >= 0 and pos.rank < N_RANKS
@@ -137,37 +191,12 @@ func can_castle(player: int) -> int:
   return castle_rights[player]
 
 func get_legal_moves() -> Array:
-  var orthogonals: Array = [
-    [ 0,  1],
-    [ 1,  0],
-    [ 0, -1],
-    [-1,  0]
-  ]
-  var diagonals: Array = [
-    [ 1,  1],
-    [ 1, -1],
-    [-1, -1],
-    [-1,  1]
-  ]
-  var orthodiagonals: Array = []
-  orthodiagonals.append_array(orthogonals)
-  orthodiagonals.append_array(diagonals)
-  var hops: Array = [
-    [ 1,  2],
-    [ 2,  1],
-    [ 2, -1],
-    [ 1, -2],
-    [-1,  2],
-    [-2,  1],
-    [-2, -1],
-    [-1, -2]
-  ]
   var moves: Array = []
   for square in get_player_squares(turn):
     var piece = get_square(square)
     match piece & PIECE_TYPE_MASK:
       PieceType.King:
-        for dir in orthodiagonals:
+        for dir in ORTHODIAGONALS:
           var target_square: SquarePos = square.move(dir[0], dir[1])
           if not is_valid_square(target_square):
             continue
@@ -175,7 +204,7 @@ func get_legal_moves() -> Array:
           if target_piece & turn == 0:
             moves.append(Ply.new(square, target_square))
       PieceType.Queen:
-        for dir in orthodiagonals:
+        for dir in ORTHODIAGONALS:
           for i in range(1, N_FILES):
             var target_square: SquarePos = square.move(i * dir[0], i * dir[1])
             if not is_valid_square(target_square):
@@ -187,7 +216,7 @@ func get_legal_moves() -> Array:
               break
             moves.append(Ply.new(square, target_square))
       PieceType.Rook:
-        for dir in orthogonals:
+        for dir in ORTHOGONALS:
           for i in range(1, N_FILES):
             var target_square: SquarePos = square.move(i * dir[0], i * dir[1])
             if not is_valid_square(target_square):
@@ -199,7 +228,7 @@ func get_legal_moves() -> Array:
               break
             moves.append(Ply.new(square, target_square))
       PieceType.Knight:
-        for dir in hops:
+        for dir in HOPS:
           var target_square: SquarePos = square.move(dir[0], dir[1])
           if not is_valid_square(target_square):
             continue
@@ -207,7 +236,7 @@ func get_legal_moves() -> Array:
           if target_piece & turn == 0:
             moves.append(Ply.new(square, square.move(dir[0], dir[1])))
       PieceType.Bishop:
-        for dir in diagonals:
+        for dir in DIAGONALS:
           for i in range(1, N_FILES):
             var target_square: SquarePos = square.move(i * dir[0], i * dir[1])
             if not is_valid_square(target_square):
@@ -252,21 +281,67 @@ func get_legal_moves() -> Array:
               en_passant_square.is_same(target_square):
             moves.append(Ply.new(square, target_square))
 
-      _:
-        pass
+  for i in range(len(moves) - 1, -1, -1):
+    var ply = moves[i]
+    if is_prevented_by_check(ply):
+      moves.remove(i)
   return moves
 
-func make_move(ply: Ply) -> bool:
-  var legal_moves = get_legal_moves()
-  var legal       = false
-  for move in legal_moves:
-    if ply.source.is_same(move.source) \
-        and ply.destination.is_same(move.destination):
-      legal = true
-      break
-  if not legal:
-    return false
-  
+func is_prevented_by_check(ply: Ply) -> bool:
+  var c = self.clone()
+  if ply:
+    c.force_move(ply)
+  var player      = c.other_player(c.turn)
+  var king_square = c.get_squares_with_piece(PieceType.King, player)[0]
+  for dir in ORTHOGONALS:
+    for i in range(1, N_FILES):
+      var square: SquarePos = king_square.move(i * dir[0], i * dir[1])
+      if not c.is_valid_square(square):
+        break
+      var piece: int = c.get_square(square)
+      if piece != NO_PIECE:
+        if piece & c.other_player(player) != 0 \
+            and (piece & (PieceType.Rook | PieceType.Queen) != 0 \
+            or (i == 1 and piece & PieceType.King != 0)):
+          return true
+        break
+  for dir in DIAGONALS:
+    for i in range(1, N_FILES):
+      var square: SquarePos = king_square.move(i * dir[0], i * dir[1])
+      if not c.is_valid_square(square):
+        break
+      var piece: int = c.get_square(square)
+      if piece != NO_PIECE:
+        if piece & c.other_player(player) != 0 \
+            and (piece & (PieceType.Bishop | PieceType.Queen) != 0 \
+            or (i == 1 and piece & PieceType.King != 0)):
+          return true
+        break
+  for dir in HOPS:
+    var square: SquarePos = king_square.move(dir[0], dir[1])
+    if not c.is_valid_square(square):
+      continue
+    var piece: int = c.get_square(square)
+    if piece != NO_PIECE:
+      if piece & c.other_player(player) != 0 \
+          and piece & PieceType.Knight != 0:
+        return true
+
+  var attacker = c.other_player(player)
+  var pawn_dir = 1 if attacker == Player.White else -1
+
+  for i in [-1, 1]:
+    var square: SquarePos = king_square.move(i, -pawn_dir)
+    if not c.is_valid_square(square):
+      continue
+    var piece: int = c.get_square(square)
+    if piece != NO_PIECE and piece & attacker != 0 \
+        and piece & PieceType.Pawn != 0:
+      return true
+
+  return false
+
+func force_move(ply: Ply) -> SquarePos:
   var piece          = get_square(ply.source)
   var captured       = get_square(ply.destination)
   var capture_square = null
@@ -300,6 +375,21 @@ func make_move(ply: Ply) -> bool:
         capture_rank    = 5
     if ply.destination.rank == en_passant_rank:
       en_passant_square = SquarePos.new(ply.destination.file, capture_rank)
+
+  return capture_square
+
+func make_move(ply: Ply) -> bool:
+  var legal_moves = get_legal_moves()
+  var legal       = false
+  for move in legal_moves:
+    if ply.source.is_same(move.source) \
+        and ply.destination.is_same(move.destination):
+      legal = true
+      break
+  if not legal:
+    return false
+  
+  var capture_square = force_move(ply)
 
   emit_signal("on_move_made", ply, turn, capture_square)
 

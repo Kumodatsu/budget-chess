@@ -21,10 +21,13 @@ namespace BudgetChess {
     private (SquareNode Square, PieceNode Piece)[,] ui_nodes =
       new (SquareNode, PieceNode)[SquarePos.FileCount, SquarePos.RankCount];
     
+    private UI.Announcement announcement;
+    
     private SquareNode selection = null;
 
     public override void _Ready() {
       base._Ready();
+      announcement = GetNode<UI.Announcement>("/root/Chess/Announcement");
       
       board_state.OnMoveMade += OnMoveMade;
 
@@ -110,9 +113,20 @@ namespace BudgetChess {
 
     private void OnMoveMade(
       Ply        ply,
+      MoveResult result,
       Player     next_player,
       SquarePos? capture_square
     ) {
+      if (result.HasFlag(MoveResult.EnPassant)) {
+        announcement.Display("En Passant!");
+      } else if (result.HasFlag(MoveResult.Checkmate)) {
+        announcement.Display("Checkmate!");
+      } else if (result.HasFlag(MoveResult.Check)) {
+        announcement.Display("Check!");
+      } else if (result.HasFlag(MoveResult.Stalemate)) {
+        announcement.Display("Stalemate!");
+      }
+
       if (capture_square.HasValue)
         GetPieceNode(capture_square.Value).QueueFree();
       var piece = GetPieceNode(ply.Source);

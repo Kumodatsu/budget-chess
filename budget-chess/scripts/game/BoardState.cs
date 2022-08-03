@@ -9,6 +9,19 @@ namespace BudgetChess {
     Long  = 2
   }
 
+  [Flags]
+  enum MoveResult {
+    Illegal    = 0,
+    Legal      = 1,
+    Capture    = 2,
+    Check      = 4,
+    Checkmate  = 8,
+    Stalemate  = 16,
+    EnPassant  = 32,
+    Promotion  = 64,
+    Castle     = 128
+  }
+
   class BoardState {
 
     private Piece?[,] board =
@@ -32,8 +45,9 @@ namespace BudgetChess {
     }
 
     public delegate void OnMoveMadeHandler(
-      Ply    ply,
-      Player next_player,
+      Ply        ply,
+      MoveResult result,
+      Player     next_player,
       SquarePos? capture_square
     );
     public event OnMoveMadeHandler OnMoveMade;
@@ -174,15 +188,20 @@ namespace BudgetChess {
 
     private Direction GetPawnDirection(Player player)
       => (0, player == Player.White ? 1 : -1);
+    
     private int GetPawnHomeRank(Player player)
       => player == Player.White ? 1 : 6;
 
-    private SquarePos? ForceMove(Ply ply) {
+    private MoveResult ForceMove(Ply ply, out SquarePos? capture_square) {
+      MoveResult result = MoveResult.Legal;
+
       var piece    = GetSquare(ply.Source).Value;
       var captured = GetSquare(ply.Destination);
-      SquarePos? capture_square = null;
-      if (captured.HasValue)
+      capture_square = null;
+      if (captured.HasValue) {
         capture_square = ply.Destination;
+        result |= MoveResult.Capture;
+      }
       SetSquare(ply.Source,      null);
       SetSquare(ply.Destination, piece);
 
@@ -195,6 +214,7 @@ namespace BudgetChess {
         var eps = en_passant_square.Value;
         capture_square = (eps.File, eps.Rank - GetPawnDirection(turn).DY);
         SetSquare(capture_square.Value, null);
+        result |= MoveResult.Capture | MoveResult.EnPassant;
       }
       
       // En passant availability
@@ -211,22 +231,22 @@ namespace BudgetChess {
 
       UpdateLegalMoves();
 
-      return capture_square;
+      return result;
     }
 
-    public bool MakeMove(Ply ply) {
+    public MoveResult MakeMove(Ply ply) {
       foreach (var legal in legal_moves)
         if (ply == legal)
           goto LegalMove;
-      return false;
+      return MoveResult.Illegal;
 
       LegalMove:;
 
-      var capture_square = ForceMove(ply);
+      var result = ForceMove(ply, out var capture_square);
 
-      OnMoveMade?.Invoke(ply, turn, capture_square);
+      OnMoveMade?.Invoke(ply, result, turn, capture_square);
 
-      return true;
+      return result;
     }
 
     #region Equality and Hash Code

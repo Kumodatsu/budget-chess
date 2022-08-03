@@ -62,7 +62,8 @@ namespace BudgetChess {
       MoveResult result,
       Player     next_player,
       SquarePos? capture_square,
-      Ply?       castle_rook_movement
+      Ply?       castle_rook_movement,
+      Piece?     promoted_piece
     );
     public event OnMoveMadeHandler OnMoveMade;
 
@@ -236,7 +237,7 @@ namespace BudgetChess {
 
     private bool IsPreventedByCheck(Ply ply) {
       BoardState hypothetical = new BoardState(this);
-      hypothetical.ForceMove(ply, out var _, out var _);
+      hypothetical.ForceMove(ply, null, out var _, out var _, out var _);
       return hypothetical.IsInCheck(turn);
     }
 
@@ -306,12 +307,15 @@ namespace BudgetChess {
 
     private MoveResult ForceMove(
       Ply            ply,
+      PieceType?     promotion_type,
       out SquarePos? capture_square,
-      out Ply?       castling_rook_movement
+      out Ply?       castling_rook_movement,
+      out Piece?     promoted_piece
     ) {
       var result             = MoveResult.Legal;
       capture_square         = null;
       castling_rook_movement = null;
+      promoted_piece         = null;
 
       var piece    = GetSquare(ply.Source).Value;
       var captured = GetSquare(ply.Destination);
@@ -374,12 +378,22 @@ namespace BudgetChess {
           en_passant_square = (ply.Source.File, home_rank + 1 * pawn_dir);
       }
 
+      // Promotion
+      var is_last_rank = ply.Destination.Rank == 0 || ply.Destination.Rank == 7;
+      if (is_pawn && is_last_rank) {
+        promoted_piece = new Piece(turn,
+          promotion_type.HasValue ? promotion_type.Value : PieceType.Pawn
+        );
+        SetSquare(ply.Destination, promoted_piece);
+        result |= MoveResult.Promotion;
+      }
+
       turn = turn.Other();
       
       return result;
     }
 
-    public MoveResult MakeMove(Ply ply) {
+    public MoveResult MakeMove(Ply ply, PieceType? promotion_piece = null) {
       foreach (var legal in legal_moves)
         if (ply == legal)
           goto LegalMove;
@@ -389,8 +403,10 @@ namespace BudgetChess {
 
       var result = ForceMove(
         ply,
+        promotion_piece,
         out var capture_square,
-        out var castle_rook_movement
+        out var castle_rook_movement,
+        out var promoted_piece
       );
       UpdatePsuedoLegalMoves();
       UpdateLegalMoves();
@@ -410,10 +426,24 @@ namespace BudgetChess {
         result,
         turn,
         capture_square,
-        castle_rook_movement
+        castle_rook_movement,
+        promoted_piece
       );
       
       return result;
+    }
+
+    public bool IsPromotion(Ply ply) {
+      var piece = GetSquare(ply.Source);
+      if (!piece.HasValue || piece.Value.PieceType != PieceType.Pawn)
+        return false;
+      var is_last_rank = ply.Destination.Rank == 0 || ply.Destination.Rank == 7;
+      if (!is_last_rank)
+        return false;
+      var dest = GetSquare(ply.Destination);
+      if (ply.Source.File == ply.Destination.File)
+        return !dest.HasValue;
+      return dest.HasValue;
     }
 
     #region Equality and Hash Code

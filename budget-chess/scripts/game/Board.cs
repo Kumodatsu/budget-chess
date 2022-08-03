@@ -21,15 +21,23 @@ namespace BudgetChess {
     private (SquareNode Square, PieceNode Piece)[,] ui_nodes =
       new (SquareNode, PieceNode)[SquarePos.FileCount, SquarePos.RankCount];
     
-    private UI.Announcement announcement;
+    private UI.Announcement    announcement;
+    private UI.PromotionDialog promotion_dialog;
     
-    private SquareNode selection = null;
+    private SquareNode selection         = null;
+    private Ply?       pending_promotion = null;
 
     public override void _Ready() {
       base._Ready();
       announcement = GetNode<UI.Announcement>("/root/Chess/Announcement");
-      
+      promotion_dialog =
+        GetNode<UI.PromotionDialog>("/root/Chess/PromotionDialog");
       board_state.OnMoveMade += OnMoveMade;
+      promotion_dialog.Connect(
+        nameof(UI.PromotionDialog.OnPieceSelected),
+        this,
+        nameof(OnPromotionPieceSelected)
+      );
 
       InitializeSquareNodes();
       InitializePieceNodes();
@@ -89,11 +97,17 @@ namespace BudgetChess {
       var piece = board_state.GetSquare(node.SquarePos);
       if (selection != null) {
         if (!piece.HasValue || piece.Value.Player != turn) {
-          board_state.MakeMove(new Ply(
+          var ply = new Ply(
             selection.SquarePos,
             node.SquarePos
-          ));
-          ResetSelection();
+          );
+          if (board_state.IsPromotion(ply)) {
+            pending_promotion = ply;
+            promotion_dialog.PopUp();
+          } else {
+            board_state.MakeMove(ply);
+            ResetSelection();
+          }
           return;
         }
         ResetSelection();
@@ -116,7 +130,8 @@ namespace BudgetChess {
       MoveResult result,
       Player     next_player,
       SquarePos? capture_square,
-      Ply?       castling_rook_movement
+      Ply?       castling_rook_movement,
+      Piece?     promoted_piece
     ) {
       if (result.HasFlag(MoveResult.Checkmate)) {
         announcement.Display("Checkmate!");
@@ -128,6 +143,8 @@ namespace BudgetChess {
         announcement.Display("En Passant!");
       } else if (result.HasFlag(MoveResult.Castle)) {
         announcement.Display("Castle!");
+      } else if (result.HasFlag(MoveResult.Promotion)) {
+        announcement.Display("Promotion!");
       }
 
       if (result.HasFlag(MoveResult.Capture))
@@ -136,6 +153,15 @@ namespace BudgetChess {
 
       if (result.HasFlag(MoveResult.Castle))
         MovePieceNode(castling_rook_movement.Value);
+
+      if (result.HasFlag(MoveResult.Promotion))
+        GetPieceNode(ply.Destination).Piece = promoted_piece.Value;
+    }
+
+    private void OnPromotionPieceSelected(PieceType type) {
+      board_state.MakeMove(pending_promotion.Value, type);
+      pending_promotion = null;
+      ResetSelection();
     }
 
     private void MovePieceNode(SquarePos from, SquarePos to) {

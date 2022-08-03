@@ -115,25 +115,38 @@ namespace BudgetChess {
       Ply        ply,
       MoveResult result,
       Player     next_player,
-      SquarePos? capture_square
+      SquarePos? capture_square,
+      Ply?       castling_rook_movement
     ) {
-      if (result.HasFlag(MoveResult.EnPassant)) {
-        announcement.Display("En Passant!");
-      } else if (result.HasFlag(MoveResult.Checkmate)) {
+      if (result.HasFlag(MoveResult.Checkmate)) {
         announcement.Display("Checkmate!");
       } else if (result.HasFlag(MoveResult.Check)) {
         announcement.Display("Check!");
       } else if (result.HasFlag(MoveResult.Stalemate)) {
         announcement.Display("Stalemate!");
+      } else if (result.HasFlag(MoveResult.EnPassant)) {
+        announcement.Display("En Passant!");
+      } else if (result.HasFlag(MoveResult.Castle)) {
+        announcement.Display("Castle!");
       }
 
-      if (capture_square.HasValue)
+      if (result.HasFlag(MoveResult.Capture))
         GetPieceNode(capture_square.Value).QueueFree();
-      var piece = GetPieceNode(ply.Source);
-      SetPieceNode(ply.Source,      null);
-      SetPieceNode(ply.Destination, piece);
-      piece.Position = GetSquareWorldPos(ply.Destination);
+      MovePieceNode(ply);
+
+      if (result.HasFlag(MoveResult.Castle))
+        MovePieceNode(castling_rook_movement.Value);
     }
+
+    private void MovePieceNode(SquarePos from, SquarePos to) {
+      var piece = GetPieceNode(from);
+      SetPieceNode(from, null);
+      SetPieceNode(to,   piece);
+      piece.Position = GetSquareWorldPos(to);
+    }
+
+    private void MovePieceNode(Ply ply)
+      => MovePieceNode(ply.Source, ply.Destination);
 
     private SquareNode GetSquareNode(SquarePos pos)
       => ui_nodes[pos.File, pos.Rank].Square;

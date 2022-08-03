@@ -6,6 +6,7 @@ namespace BudgetChess {
 
   [Flags]
   enum CastleType {
+    None  = 0,
     Short = 1,
     Long  = 2
   }
@@ -60,7 +61,8 @@ namespace BudgetChess {
       Ply        ply,
       MoveResult result,
       Player     next_player,
-      SquarePos? capture_square
+      SquarePos? capture_square,
+      Ply?       castle_rook_movement
     );
     public event OnMoveMadeHandler OnMoveMade;
 
@@ -164,6 +166,31 @@ namespace BudgetChess {
         switch (piece.PieceType) {
           case PieceType.King:
             AddReachableSquares(square, Directions.Orthodiagonals, 1);
+
+            // Castling
+            var castle_rights = GetCastleRights(turn);
+            if (castle_rights == CastleType.None || IsInCheck(turn))
+              break;
+            Func<SquarePos, bool> is_available = p
+                => !GetSquare(p).HasValue
+                && !IsPreventedByCheck(new Ply(square, p));
+            if (castle_rights.HasFlag(CastleType.Short)) {
+              SquarePos[] passage_squares = {
+                square + (1, 0),
+                square + (2, 0),
+              };
+              if (passage_squares.All(is_available))
+                legal_moves.Add(new Ply(square, passage_squares[1]));
+            }
+            if (castle_rights.HasFlag(CastleType.Long)) {
+              SquarePos[] passage_squares = {
+                square + (-1, 0),
+                square + (-2, 0),
+              };
+              if (passage_squares.All(is_available))
+                legal_moves.Add(new Ply(square, passage_squares[1]));
+            }
+
             break;
           case PieceType.Queen:
             AddReachableSquares(square, Directions.Orthodiagonals, 7);
@@ -179,10 +206,14 @@ namespace BudgetChess {
             break;
           case PieceType.Pawn:
             Direction pawn_direction = GetPawnDirection(turn);
+
+            // Moving
             Direction[] dirs = { pawn_direction };
             bool is_at_home_rank = GetPawnHomeRank(turn) == square.Rank;
             AddReachableSquares(square, dirs, is_at_home_rank ? 2 : 1,
               CaptureAbility.Impossible);
+
+            // Capturing
             dirs = new Direction[] {
               (-1, pawn_direction.DY),
               ( 1, pawn_direction.DY)
@@ -193,6 +224,7 @@ namespace BudgetChess {
               if (square + dirs[0] == eps || square + dirs[1] == eps)
                 legal_moves.Add(new Ply(square, eps));
             }
+
             break;
         }
       }
@@ -204,7 +236,7 @@ namespace BudgetChess {
 
     private bool IsPreventedByCheck(Ply ply) {
       BoardState hypothetical = new BoardState(this);
-      hypothetical.ForceMove(ply, out var capture_square);
+      hypothetical.ForceMove(ply, out var _, out var _);
       return hypothetical.IsInCheck(turn);
     }
 
@@ -272,12 +304,17 @@ namespace BudgetChess {
       );
     }
 
-    private MoveResult ForceMove(Ply ply, out SquarePos? capture_square) {
-      MoveResult result = MoveResult.Legal;
+    private MoveResult ForceMove(
+      Ply            ply,
+      out SquarePos? capture_square,
+      out Ply?       castling_rook_movement
+    ) {
+      var result             = MoveResult.Legal;
+      capture_square         = null;
+      castling_rook_movement = null;
 
       var piece    = GetSquare(ply.Source).Value;
       var captured = GetSquare(ply.Destination);
-      capture_square = null;
       if (captured.HasValue) {
         capture_square = ply.Destination;
         result |= MoveResult.Capture;
@@ -285,7 +322,37 @@ namespace BudgetChess {
       SetSquare(ply.Source,      null);
       SetSquare(ply.Destination, piece);
 
+      bool is_king = piece.PieceType == PieceType.King;
       bool is_pawn = piece.PieceType == PieceType.Pawn;
+
+      // Castling
+      if (is_king) {
+        var movement  = ply.Destination.File - ply.Source.File;
+        var is_castle = Math.Abs(movement) == 2;
+        if (is_castle) {
+          if (movement == 2) {
+            var rook_square = (7, ply.Source.Rank);
+            var rook        = GetSquare(rook_square).Value;
+            castling_rook_movement = new Ply(
+              rook_square,
+              ply.Source + (1, 0)
+            );
+            SetSquare(castling_rook_movement.Value.Destination, rook);
+            SetSquare(castling_rook_movement.Value.Source,      null);
+          } else if (movement == -2) {
+            var rook_square = (0, ply.Source.Rank);
+            var rook        = GetSquare(rook_square).Value;
+            castling_rook_movement = new Ply(
+              rook_square,
+              ply.Source + (-1, 0)
+            );
+            SetSquare(castling_rook_movement.Value.Destination, rook);
+            SetSquare(castling_rook_movement.Value.Source,      null);
+          }
+          castle_rights[turn] = CastleType.None;
+          result |= MoveResult.Castle;
+        }
+      }
 
       // En passant capture
       if (is_pawn
@@ -308,7 +375,6 @@ namespace BudgetChess {
       }
 
       turn = turn.Other();
-      UpdatePsuedoLegalMoves();
       
       return result;
     }
@@ -321,7 +387,12 @@ namespace BudgetChess {
 
       LegalMove:;
 
-      var result = ForceMove(ply, out var capture_square);
+      var result = ForceMove(
+        ply,
+        out var capture_square,
+        out var castle_rook_movement
+      );
+      UpdatePsuedoLegalMoves();
       UpdateLegalMoves();
 
       bool is_check     = IsInCheck(turn);
@@ -334,7 +405,13 @@ namespace BudgetChess {
         result |= MoveResult.Stalemate;
       }
 
-      OnMoveMade?.Invoke(ply, result, turn, capture_square);
+      OnMoveMade?.Invoke(
+        ply,
+        result,
+        turn,
+        capture_square,
+        castle_rook_movement
+      );
       
       return result;
     }

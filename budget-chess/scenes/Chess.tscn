@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=2]
+[gd_scene load_steps=11 format=2]
 
 [ext_resource path="res://scripts/game/Board.cs" type="Script" id=1]
 [ext_resource path="res://assets/fonts/tuffy-bold/Tuffy_Bold.ttf" type="DynamicFontData" id=2]
@@ -50,6 +50,10 @@ font_data = ExtResource( 2 )
 
 [sub_resource type="DynamicFont" id=5]
 size = 32
+font_data = ExtResource( 2 )
+
+[sub_resource type="DynamicFont" id=6]
+size = 24
 font_data = ExtResource( 2 )
 
 [node name="Chess" type="Node2D"]
@@ -123,9 +127,9 @@ __meta__ = {
 
 [node name="ColorRect" type="ColorRect" parent="PromotionDialog/Control"]
 margin_left = -150.0
-margin_top = -60.0
+margin_top = -80.0
 margin_right = 150.0
-margin_bottom = 60.0
+margin_bottom = 80.0
 color = Color( 0.121569, 0.682353, 0.92549, 1 )
 __meta__ = {
 "_edit_use_anchors_": false
@@ -133,9 +137,9 @@ __meta__ = {
 
 [node name="Label" type="Label" parent="PromotionDialog/Control"]
 margin_left = -122.0
-margin_top = -40.0
+margin_top = -60.0
 margin_right = 122.0
-margin_bottom = -7.0
+margin_bottom = -27.0
 custom_fonts/font = SubResource( 4 )
 text = "Select Promotion"
 __meta__ = {
@@ -144,11 +148,22 @@ __meta__ = {
 
 [node name="OptionButton" type="OptionButton" parent="PromotionDialog/Control"]
 margin_left = -75.0
-margin_top = 10.0
+margin_top = -20.0
 margin_right = 75.0
-margin_bottom = 49.0
+margin_bottom = 19.0
 rect_min_size = Vector2( 150, 30 )
 custom_fonts/font = SubResource( 5 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Button" type="Button" parent="PromotionDialog/Control"]
+margin_left = -65.0
+margin_top = 35.0
+margin_right = 65.0
+margin_bottom = 66.0
+custom_fonts/font = SubResource( 6 )
+text = "Promote"
 __meta__ = {
 "_edit_use_anchors_": false
 }

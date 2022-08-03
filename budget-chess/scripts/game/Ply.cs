@@ -7,6 +7,9 @@ namespace BudgetChess {
     public Ply(SquarePos source, SquarePos destination)
       => (Source, Destination) = (source, destination);
 
+    public override string ToString()
+      => $"{Source} -> {Destination}";
+
     #region Equality and HashCode
     public static bool operator == (Ply a, Ply b)
       => a.Source == b.Source && a.Destination == b.Destination;
@@ -18,6 +21,5 @@ namespace BudgetChess {
     public override int GetHashCode()
       => Source.GetHashCode() * 4483 + Destination.GetHashCode();
     #endregion
-  };
-
+  }
 }

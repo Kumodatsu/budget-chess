@@ -325,6 +325,11 @@ namespace BudgetChess {
               ( 1, pawn_direction.DY)
             };
             AddReachableSquares(square, dirs, 1, CaptureAbility.Mandatory);
+            if (en_passant_square.HasValue) {
+              var eps = en_passant_square.Value;
+              if (square + dirs[0] == eps || square + dirs[1] == eps)
+                legal_moves.Add(new Ply(square, eps));
+            }
             break;
         }
       }
@@ -336,17 +341,38 @@ namespace BudgetChess {
       => player == Player.White ? 1 : 6;
 
     private SquarePos? ForceMove(Ply ply) {
-      var piece    = GetSquare(ply.Source);
+      var piece    = GetSquare(ply.Source).Value;
       var captured = GetSquare(ply.Destination);
       SquarePos? capture_square = null;
       if (captured.HasValue)
         capture_square = ply.Destination;
       SetSquare(ply.Source,      null);
       SetSquare(ply.Destination, piece);
-      turn = turn.Other();
-      UpdateLegalMoves();
 
-      // TODO: En passant
+      bool is_pawn = piece.PieceType == PieceType.Pawn;
+
+      // En passant capture
+      if (is_pawn
+          && en_passant_square.HasValue
+          && en_passant_square.Value == ply.Destination) {
+        var eps = en_passant_square.Value;
+        capture_square = (eps.File, eps.Rank - GetPawnDirection(turn).DY);
+        SetSquare(capture_square.Value, null);
+      }
+      
+      // En passant availability
+      en_passant_square = null;
+      if (is_pawn) {
+        int home_rank = GetPawnHomeRank(turn);
+        int pawn_dir  = GetPawnDirection(turn).DY;
+        int ep_rank   = home_rank + 2 * pawn_dir;
+        if (ply.Source.Rank == home_rank && ply.Destination.Rank == ep_rank)
+          en_passant_square = (ply.Source.File, home_rank + 1 * pawn_dir);
+      }
+
+      turn = turn.Other();
+
+      UpdateLegalMoves();
 
       return capture_square;
     }

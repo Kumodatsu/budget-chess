@@ -26,6 +26,8 @@ namespace BudgetChess {
     public override void _Ready() {
       base._Ready();
       
+      board_state.OnMoveMade += OnMoveMade;
+
       InitializeSquareNodes();
       InitializePieceNodes();
     }
@@ -72,9 +74,61 @@ namespace BudgetChess {
     private Color GetSquareColor(SquarePos pos)
       => (pos.File + pos.Rank) % 2 == 0 ? DarkSquareColor : LightSquareColor;
 
-    private void OnSquareSelected(SquareNode node) {
-
+    private void ResetSelection() {
+      selection = null;
+      for (int rank = 0; rank < SquarePos.RankCount; rank++)
+        for (int file = 0; file < SquarePos.FileCount; file++)
+          ui_nodes[file, rank].Square.Modulate = Colors.White;
     }
+
+    private void OnSquareSelected(SquareNode node) {
+      var turn  = board_state.Turn;
+      var piece = board_state.GetSquare(node.SquarePos);
+      if (selection != null) {
+        if (!piece.HasValue || piece.Value.Player != turn) {
+          board_state.MakeMove(new Ply(
+            selection.SquarePos,
+            node.SquarePos
+          ));
+          ResetSelection();
+          return;
+        }
+        ResetSelection();
+      } else if (piece.HasValue && piece.Value.Player != turn) {
+        return;
+      }
+
+      foreach (var legal in board_state.GetLegalMoves()) {
+        if (legal.Source == node.SquarePos) {
+          ui_nodes[legal.Destination.File, legal.Destination.Rank]
+            .Square.Modulate = SelectionColor;
+        }
+      }
+
+      selection = node;
+    }
+
+    private void OnMoveMade(
+      Ply        ply,
+      Player     next_player,
+      SquarePos? capture_square
+    ) {
+      if (capture_square.HasValue)
+        GetPieceNode(capture_square.Value).QueueFree();
+      var piece = GetPieceNode(ply.Source);
+      SetPieceNode(ply.Source,      null);
+      SetPieceNode(ply.Destination, piece);
+      piece.Position = GetSquareWorldPos(ply.Destination);
+    }
+
+    private SquareNode GetSquareNode(SquarePos pos)
+      => ui_nodes[pos.File, pos.Rank].Square;
+    private void SetSquareNode(SquarePos pos, SquareNode node)
+      => ui_nodes[pos.File, pos.Rank].Square = node;
+    private PieceNode GetPieceNode(SquarePos pos)
+      => ui_nodes[pos.File, pos.Rank].Piece;
+    private void SetPieceNode(SquarePos pos, PieceNode node)
+      => ui_nodes[pos.File, pos.Rank].Piece = node;
 
   };
 

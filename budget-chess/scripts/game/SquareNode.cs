@@ -42,8 +42,7 @@ namespace BudgetChess {
       button.Connect("pressed", this, nameof(OnSelected));
     }
 
-    public string SquareName
-      => $"{(char) ('a' + square_pos.File)}{square_pos.Rank + 1}";
+    public string SquareName => square_pos.Name;
 
     public void OnSelected()
       => EmitSignal(nameof(OnSquareSelected), this);

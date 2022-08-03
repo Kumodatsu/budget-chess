@@ -103,6 +103,10 @@ namespace BudgetChess {
     public static SquarePos operator + (SquarePos pos, Direction d)
       => (pos.File + d.DX, pos.Rank + d.DY);
 
+    public string Name => $"{(char) ('a' + File)}{Rank + 1}";
+
+    public override string ToString() => Name;
+
     #region Equality and HashCode
     public static bool operator == (SquarePos a, SquarePos b)
       => a.File == b.File && a.Rank == b.Rank;
@@ -114,8 +118,7 @@ namespace BudgetChess {
     public override int GetHashCode()
       => File + FileCount * Rank;
     #endregion
-  };
-
+  }
   struct Ply {
     public SquarePos Source;
     public SquarePos Destination;
@@ -225,6 +228,11 @@ namespace BudgetChess {
         yield return pos;
     }
 
+    public IEnumerable<Ply> GetLegalMoves() {
+      foreach (var legal in legal_moves)
+        yield return legal;
+    }
+
     private void InitializeBoard() {
       for (int file = 0; file < SquarePos.FileCount; file++)
         for (int rank = 0; rank < SquarePos.RankCount; rank++)
@@ -261,17 +269,17 @@ namespace BudgetChess {
         Action<Direction[], int> add_reachable_squares =
           (Direction[] dirs, int range) => {
             foreach (var dir in dirs) {
-              for (int i = 0; i < range; i++) {
+              for (int i = 1; i <= range; i++) {
                 var target_square = square + i * dir;
                 if (!target_square.IsValid)
                   break;
                 var target_piece = GetSquare(target_square);
                 if (target_piece.HasValue) {
                   if (target_piece.Value.Player != turn)
-                    legal_moves.Append(new Ply(square, target_square));
+                    legal_moves.Add(new Ply(square, target_square));
                   break;
                 }
-                legal_moves.Append(new Ply(square, target_square));
+                legal_moves.Add(new Ply(square, target_square));
               }
             }
           };
@@ -309,6 +317,7 @@ namespace BudgetChess {
       SetSquare(ply.Source,      null);
       SetSquare(ply.Destination, piece);
       turn = turn.Other();
+      UpdateLegalMoves();
 
       // TODO: En passant
 

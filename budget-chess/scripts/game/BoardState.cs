@@ -1,46 +1,7 @@
-using Godot;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace BudgetChess {
-
-  static class MultidimensionalArrayExtensions {
-    public static bool SequenceEquals<T>(this T[,] xs, T[,] ys) {
-      if (xs.GetLength(0) != ys.GetLength(0)
-          || xs.GetLength(1) != ys.GetLength(1)) {
-        return false;
-      }
-
-      for (int y = 0; y < xs.GetLength(1); y++)
-        for (int x = 0; x < xs.GetLength(0); x++)
-          if (!xs[x, y].Equals(ys[x, y]))
-            return false;
-
-      return true;
-    }
-  }
-
-  [Flags]
-  enum PieceType {
-    King   = 1,
-    Queen  = 2,
-    Rook   = 4,
-    Knight = 8,
-    Bishop = 16,
-    Pawn   = 32
-  }
-
-  [Flags]
-  enum Player {
-    White = 64,
-    Black = 128
-  }
-
-  static class PlayerEnumExtensions {
-    public static Player Other(this Player player)
-      => player == Player.White ? Player.Black : Player.White;
-  }
 
   [Flags]
   enum CastleType {
@@ -48,131 +9,7 @@ namespace BudgetChess {
     Long  = 2
   }
 
-  struct Piece {
-    public Player    Player    { get; set; }
-    public PieceType PieceType { get; set; }
-
-    public Piece(Player player, PieceType piece_type)
-      => (Player, PieceType) = (player, piece_type);
-
-    #region Equality and HashCode
-    public static bool operator == (Piece a, Piece b)
-      => a.PieceType == b.PieceType && a.Player == b.Player;
-    public static bool operator != (Piece a, Piece b)
-      => a.PieceType != b.PieceType || a.Player != b.Player;
-    public override bool Equals(object obj)
-      => obj is Piece other
-      && this == other;
-    public override int GetHashCode()
-      => (int) PieceType + (int) Player;
-    #endregion
-  }
-
-  struct Direction {
-    public int DX { get; set; }
-    public int DY { get; set; }
-
-    public Direction(int dx, int dy)
-      => (DX, DY) = (dx, dy);
-
-    public static implicit operator Direction ((int DX, int DY) tuple)
-      => new Direction(tuple.DX, tuple.DY);
-
-    public static Direction operator * (int s, Direction d)
-      => (s * d.DX, s * d.DY);
-  }
-
-  struct SquarePos {
-    public const int
-      FileCount = 8,
-      RankCount = 8;
-    
-    public int File { get; set; }
-    public int Rank { get; set; }
-
-    public SquarePos(int file, int rank)
-      => (File, Rank) = (file, rank);
-
-    public static implicit operator SquarePos ((int File, int Rank) tuple)
-      => new SquarePos(tuple.File, tuple.Rank);
-
-    public bool IsValid
-      => 0 <= File && File < FileCount
-      && 0 <= Rank && Rank < RankCount;
-
-    public static SquarePos operator + (SquarePos pos, Direction d)
-      => (pos.File + d.DX, pos.Rank + d.DY);
-
-    public string Name => $"{(char) ('a' + File)}{Rank + 1}";
-
-    public override string ToString() => Name;
-
-    #region Equality and HashCode
-    public static bool operator == (SquarePos a, SquarePos b)
-      => a.File == b.File && a.Rank == b.Rank;
-    public static bool operator != (SquarePos a, SquarePos b)
-      => a.File != b.File || a.Rank != b.Rank;
-    public override bool Equals(object obj)
-      => obj is SquarePos other
-      && this == other;
-    public override int GetHashCode()
-      => File + FileCount * Rank;
-    #endregion
-  }
-  struct Ply {
-    public SquarePos Source;
-    public SquarePos Destination;
-
-    public Ply(SquarePos source, SquarePos destination)
-      => (Source, Destination) = (source, destination);
-
-    #region Equality and HashCode
-    public static bool operator == (Ply a, Ply b)
-      => a.Source == b.Source && a.Destination == b.Destination;
-    public static bool operator != (Ply a, Ply b)
-      => a.Source != b.Source || a.Destination != b.Destination;
-    public override bool Equals(object obj)
-      => obj is Ply other
-      && this == other;
-    public override int GetHashCode()
-      => Source.GetHashCode() * 4483 + Destination.GetHashCode();
-    #endregion
-  };
-
   class BoardState {
-    static readonly Direction[]
-      Orthogonals = {
-        ( 0,  1),
-        ( 1,  0),
-        ( 0, -1),
-        (-1,  0)
-      },
-      Diagonals = {
-        ( 1,  1),
-        ( 1, -1),
-        (-1, -1),
-        (-1,  1)
-      },
-      Orthodiagonals = {
-        ( 0,  1),
-        ( 1,  0),
-        ( 0, -1),
-        (-1,  0),
-        ( 1,  1),
-        ( 1, -1),
-        (-1, -1),
-        (-1,  1)
-      },
-      KnightHops = {
-        ( 1,  2),
-        ( 2,  1),
-        ( 2, -1),
-        ( 1, -2),
-        (-1,  2),
-        (-2,  1),
-        (-2, -1),
-        (-1, -2)
-      };
 
     private Piece?[,] board =
       new Piece?[SquarePos.FileCount, SquarePos.RankCount];
@@ -300,19 +137,19 @@ namespace BudgetChess {
         var piece = GetSquare(square).Value;
         switch (piece.PieceType) {
           case PieceType.King:
-            AddReachableSquares(square, Orthodiagonals, 1);
+            AddReachableSquares(square, Directions.Orthodiagonals, 1);
             break;
           case PieceType.Queen:
-            AddReachableSquares(square, Orthodiagonals, 7);
+            AddReachableSquares(square, Directions.Orthodiagonals, 7);
             break;
           case PieceType.Rook:
-            AddReachableSquares(square, Orthogonals, 7);
+            AddReachableSquares(square, Directions.Orthogonals, 7);
             break;
           case PieceType.Knight:
-            AddReachableSquares(square, KnightHops, 1);
+            AddReachableSquares(square, Directions.KnightHops, 1);
             break;
           case PieceType.Bishop:
-            AddReachableSquares(square, Diagonals, 7);
+            AddReachableSquares(square, Directions.Diagonals, 7);
             break;
           case PieceType.Pawn:
             Direction pawn_direction = GetPawnDirection(turn);

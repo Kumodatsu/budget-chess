@@ -262,51 +262,78 @@ namespace BudgetChess {
         SetSquare((i, 6), new Piece(Player.Black, PieceType.Pawn));
     }
 
+    private enum CaptureAbility {
+      Mandatory,
+      Optional,
+      Impossible
+    }
+
+    private void AddReachableSquares(
+      SquarePos      square,
+      Direction[]    dirs,
+      int            range,
+      CaptureAbility capture_ability = CaptureAbility.Optional
+    ) {
+      foreach (var dir in dirs) {
+        for (int i = 1; i <= range; i++) {
+          var target_square = square + i * dir;
+          if (!target_square.IsValid)
+            break;
+          var target_piece = GetSquare(target_square);
+          if (target_piece.HasValue) {
+            if (capture_ability != CaptureAbility.Impossible
+                && target_piece.Value.Player != turn) {
+              legal_moves.Add(new Ply(square, target_square));
+            }
+            break;
+          }
+          if (capture_ability != CaptureAbility.Mandatory)
+            legal_moves.Add(new Ply(square, target_square));
+        }
+      }
+    }
+
     private void UpdateLegalMoves() {
       legal_moves.Clear();
 
       foreach (var square in GetSquaresOccupiedByPlayer(turn)) {
-        Action<Direction[], int> add_reachable_squares =
-          (Direction[] dirs, int range) => {
-            foreach (var dir in dirs) {
-              for (int i = 1; i <= range; i++) {
-                var target_square = square + i * dir;
-                if (!target_square.IsValid)
-                  break;
-                var target_piece = GetSquare(target_square);
-                if (target_piece.HasValue) {
-                  if (target_piece.Value.Player != turn)
-                    legal_moves.Add(new Ply(square, target_square));
-                  break;
-                }
-                legal_moves.Add(new Ply(square, target_square));
-              }
-            }
-          };
-
         var piece = GetSquare(square).Value;
         switch (piece.PieceType) {
           case PieceType.King:
-            add_reachable_squares(Orthodiagonals, 1);
+            AddReachableSquares(square, Orthodiagonals, 1);
             break;
           case PieceType.Queen:
-            add_reachable_squares(Orthodiagonals, 7);
+            AddReachableSquares(square, Orthodiagonals, 7);
             break;
           case PieceType.Rook:
-            add_reachable_squares(Orthogonals, 7);
+            AddReachableSquares(square, Orthogonals, 7);
             break;
           case PieceType.Knight:
-            add_reachable_squares(KnightHops, 1);
+            AddReachableSquares(square, KnightHops, 1);
             break;
           case PieceType.Bishop:
-            add_reachable_squares(Diagonals, 7);
+            AddReachableSquares(square, Diagonals, 7);
             break;
           case PieceType.Pawn:
-            add_reachable_squares(Orthodiagonals, 1); // TODO
+            Direction pawn_direction = GetPawnDirection(turn);
+            Direction[] dirs = { pawn_direction };
+            bool is_at_home_rank = GetPawnHomeRank(turn) == square.Rank;
+            AddReachableSquares(square, dirs, is_at_home_rank ? 2 : 1,
+              CaptureAbility.Impossible);
+            dirs = new Direction[] {
+              (-1, pawn_direction.DY),
+              ( 1, pawn_direction.DY)
+            };
+            AddReachableSquares(square, dirs, 1, CaptureAbility.Mandatory);
             break;
         }
       }
     }
+
+    private Direction GetPawnDirection(Player player)
+      => (0, player == Player.White ? 1 : -1);
+    private int GetPawnHomeRank(Player player)
+      => player == Player.White ? 1 : 6;
 
     private SquarePos? ForceMove(Ply ply) {
       var piece    = GetSquare(ply.Source);

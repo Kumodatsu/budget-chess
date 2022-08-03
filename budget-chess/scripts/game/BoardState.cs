@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace BudgetChess {
 
@@ -41,7 +42,18 @@ namespace BudgetChess {
     public BoardState() {
       InitializeBoard();
       InitializeDefaultStartingPosition();
-      UpdateLegalMoves();
+      UpdatePsuedoLegalMoves();
+    }
+
+    private BoardState(BoardState src) {
+      for (int rank = 0; rank < SquarePos.RankCount; rank++)
+        for (int file = 0; file < SquarePos.FileCount; file++)
+          this.board[file, rank] = src.board[file, rank];
+      this.turn = src.turn;
+      this.en_passant_square = src.en_passant_square;
+      this.castle_rights[Player.White] = src.castle_rights[Player.White];
+      this.castle_rights[Player.Black] = src.castle_rights[Player.Black];
+      this.legal_moves = new List<Ply>(src.legal_moves);
     }
 
     public delegate void OnMoveMadeHandler(
@@ -144,7 +156,7 @@ namespace BudgetChess {
       }
     }
 
-    private void UpdateLegalMoves() {
+    private void UpdatePsuedoLegalMoves() {
       legal_moves.Clear();
 
       foreach (var square in GetSquaresOccupiedByPlayer(turn)) {
@@ -186,11 +198,79 @@ namespace BudgetChess {
       }
     }
 
+    public void UpdateLegalMoves() {
+      legal_moves.Filter(ply => !IsPreventedByCheck(ply));
+    }
+
+    private bool IsPreventedByCheck(Ply ply) {
+      BoardState hypothetical = new BoardState(this);
+      hypothetical.ForceMove(ply, out var capture_square);
+      return hypothetical.IsInCheck(turn);
+    }
+
+    private bool TestLineOfSight(
+      SquarePos   target_square,
+      Player      player,
+      Direction[] directions,
+      int         range,
+      PieceType   piece_type
+    ) {
+      foreach (var dir in directions) {
+        for (int i = 1; i <= range; i++) {
+          var square = target_square + i * dir;
+          if (!square.IsValid)
+            break;
+          var maybe_piece = GetSquare(square);
+          if (maybe_piece.HasValue) {
+            var piece = maybe_piece.Value;
+            var is_check =
+              piece.Player == player.Other()
+              && (piece.PieceType & piece_type) != 0;
+            if (is_check)
+              return true;
+            break;
+          }
+        }
+      }
+      return false;
+    }
+
+    private bool IsInCheck(Player player) {
+      var king_square = GetKingSquare(player);
+      return TestLineOfSight(king_square, player,
+        Directions.Orthogonals, 7, PieceType.Queen | PieceType.Rook)
+        || TestLineOfSight(king_square, player,
+        Directions.Diagonals, 7, PieceType.Queen | PieceType.Bishop)
+        || TestLineOfSight(king_square, player,
+        Directions.Orthodiagonals, 1, PieceType.King)
+        || TestLineOfSight(king_square, player,
+        Directions.KnightHops, 1, PieceType.Knight)
+        || TestLineOfSight(king_square, player,
+        Directions.Diagonals, 1, PieceType.Pawn)
+        ;
+    }
+
     private Direction GetPawnDirection(Player player)
       => (0, player == Player.White ? 1 : -1);
     
     private int GetPawnHomeRank(Player player)
       => player == Player.White ? 1 : 6;
+
+    private SquarePos GetKingSquare(Player player) {
+      for (int rank = 0; rank < SquarePos.RankCount; rank++)
+        for (int file = 0; file < SquarePos.FileCount; file++) {
+          var pos   = new SquarePos(file, rank);
+          var piece = GetSquare(pos);
+          if (piece.HasValue
+              && piece.Value.Player == player
+              && piece.Value.PieceType == PieceType.King) {
+            return pos;
+          }
+        }
+      throw new InvalidOperationException(
+        "The given player has no king on the board."
+      );
+    }
 
     private MoveResult ForceMove(Ply ply, out SquarePos? capture_square) {
       MoveResult result = MoveResult.Legal;
@@ -228,9 +308,8 @@ namespace BudgetChess {
       }
 
       turn = turn.Other();
-
-      UpdateLegalMoves();
-
+      UpdatePsuedoLegalMoves();
+      
       return result;
     }
 
@@ -243,9 +322,20 @@ namespace BudgetChess {
       LegalMove:;
 
       var result = ForceMove(ply, out var capture_square);
+      UpdateLegalMoves();
+
+      bool is_check     = IsInCheck(turn);
+      bool has_no_moves = legal_moves.Count == 0;
+      if (is_check) {
+        result |= MoveResult.Check;
+        if (has_no_moves)
+          result |= MoveResult.Checkmate;
+      } else if (has_no_moves) {
+        result |= MoveResult.Stalemate;
+      }
 
       OnMoveMade?.Invoke(ply, result, turn, capture_square);
-
+      
       return result;
     }
 
